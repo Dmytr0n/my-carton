@@ -3,60 +3,69 @@ name: Build My-Carton App
 on:
   push:
     branches:
-      - '*'
+      - "*"
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
-      - '*'
+      - "*"
+
+permissions:
+  contents: write
 
 jobs:
   run-script:
     runs-on: windows-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up MSBuild
-      uses: microsoft/setup-msbuild@v1
-     
-    - name: Setup NuGet
-      uses: nuget/setup-nuget@v1
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v1
 
-    - name: Run Build Script
-      shell: cmd
-      run: |
-        .\run.bat  # Використовуємо твою назву файлу
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v1
 
-    - name: Upload script results as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-artifacts
-        path: ./artefacts
+      - name: Run Build Script
+        shell: cmd
+        run: |
+          call run.bat
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            ./artefacts
+            ./deploy/installer
+            ./deploy/client
 
   release:
     name: Release My-Carton
     runs-on: ubuntu-22.04
     needs: run-script
     if: startsWith(github.ref, 'refs/tags/')
+
     steps:
-    
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: ./release_files
-      
+
+      - name: List files (debug)
+        run: ls -R ./release_files
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Визначаємо версію з тегу
           TAG_NAME="${{ github.ref_name }}"
           RELEASE_TITLE="My-Carton $TAG_NAME"
-          
+
           gh release create "$TAG_NAME" \
-              --repo="$GITHUB_REPOSITORY" \
-              --title="$RELEASE_TITLE" \
-              --generate-notes \
-              ./release_files/*
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TITLE" \
+            --generate-notes \
+            ./release_files/**/*
