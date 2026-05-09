@@ -4,7 +4,8 @@ using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
-using Excel = Microsoft.Office.Interop.Excel;
+using ClosedXML.Excel; // ДОДАТИ
+using System.Diagnostics; // Знадобиться для відкриття файлу після збереження
 using FontAwesome.Sharp; // Це дозволить нам брати круті іконки
 
 namespace moy_carton
@@ -436,37 +437,59 @@ namespace moy_carton
 
         private void ExportToExcel(DataGridView dgv)
         {
-            Excel.Application excelApp = null;
-            Excel.Workbook workbook = null;
-            Excel.Worksheet worksheet = null;
-
             try
             {
-                excelApp = new Excel.Application();
-                if (excelApp == null) { MessageBox.Show("Excel не знайдено!"); return; }
-
-                workbook = excelApp.Workbooks.Add(Type.Missing);
-                worksheet = (Excel.Worksheet)workbook.Sheets[1];
-                worksheet.Name = "Місячні дані";
-
-                for (int i = 0; i < dgv.Columns.Count; i++)
-                    worksheet.Cells[1, i + 1] = dgv.Columns[i].HeaderText;
-
-                for (int i = 0; i < dgv.Rows.Count; i++)
+                using (var workbook = new XLWorkbook())
                 {
-                    for (int j = 0; j < dgv.Columns.Count; j++)
+                    var worksheet = workbook.Worksheets.Add("Місячні дані");
+
+                    // 1. Заголовки стовпців
+                    for (int i = 0; i < dgv.Columns.Count; i++)
                     {
-                        var val = dgv.Rows[i].Cells[j].Value;
-                        worksheet.Cells[i + 2, j + 1] = val != null ? val.ToString() : "";
+                        worksheet.Cell(1, i + 1).Value = dgv.Columns[i].HeaderText;
+                        worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                        worksheet.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2980b9");
+                        worksheet.Cell(1, i + 1).Style.Font.FontColor = XLColor.White;
+                    }
+
+                    // 2. Дані таблиці
+                    for (int i = 0; i < dgv.Rows.Count; i++)
+                    {
+                        for (int j = 0; j < dgv.Columns.Count; j++)
+                        {
+                            var val = dgv.Rows[i].Cells[j].Value;
+                            if (val != null)
+                            {
+                                // Перевіряємо, чи це число, щоб у Excel можна було рахувати формули
+                                if (double.TryParse(val.ToString(), out double numericVal))
+                                    worksheet.Cell(i + 2, j + 1).Value = numericVal;
+                                else
+                                    worksheet.Cell(i + 2, j + 1).Value = val.ToString();
+                            }
+                        }
+                    }
+
+                    // 3. Автопідбір ширини колонок
+                    worksheet.Columns().AdjustToContents();
+
+                    // 4. Збереження через діалогове вікно
+                    SaveFileDialog sfd = new SaveFileDialog();
+                    sfd.Filter = "Excel Workbook|*.xlsx";
+                    sfd.FileName = "Звіт_картон_" + DateTime.Now.ToString("MM_yyyy");
+
+                    if (sfd.ShowDialog() == DialogResult.OK)
+                    {
+                        workbook.SaveAs(sfd.FileName);
+                        MessageBox.Show("Дані успішно експортовано в Excel!", "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                        // Опціонально: відкрити файл після збереження
+                        Process.Start(new ProcessStartInfo(sfd.FileName) { UseShellExecute = true });
                     }
                 }
-                worksheet.Columns.AutoFit();
-                excelApp.Visible = true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Помилка: " + ex.Message);
-                if (excelApp != null) excelApp.Visible = true;
+                MessageBox.Show("Помилка при експорті в Excel: " + ex.Message, "Помилка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
