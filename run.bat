@@ -136,6 +136,21 @@ if exist "%clientBuildOutput%\moy_carton.exe" (
 )
 
 REM =========================================================
+REM ВСТАВИТИ КОД ДЛЯ КОПІЮВАННЯ ІКОНКИ ТУТ
+REM =========================================================
+echo.
+echo Step 5.1: Copying icon to deploy folder...
+
+copy /Y "%rootDir%\src\MyCarton\karton.ico" "%clientBuildOutput%\karton.ico" >nul
+
+if "%errorlevel%"=="0" (
+    echo [OK] karton.ico copied successfully.
+) else (
+    echo [WARNING] Failed to copy karton.ico.
+)
+
+REM =========================================================
+REM =========================================================
 REM STEP 8 - CREATE ARCHIVE
 REM =========================================================
 
