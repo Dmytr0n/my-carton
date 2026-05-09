@@ -56,18 +56,18 @@ jobs:
           name: build-artifacts
           path: ./release_files
 
-      - name: Debug file structure
+      - name: Debug structure
         run: |
           echo "=== RELEASE FILE STRUCTURE ==="
           find ./release_files
 
-      - name: Prepare release files
+      - name: Create ZIP archive
         run: |
-          mkdir -p release_upload
-          find release_files -type f -exec cp {} release_upload/ \;
+          cd release_files
+          zip -r ../my-carton-release.zip .
 
-          echo "=== UPLOAD CONTENT ==="
-          ls -R release_upload
+          echo "=== ZIP CREATED ==="
+          ls -lh ../my-carton-release.zip
 
       - name: Create GitHub Release
         env:
@@ -78,10 +78,8 @@ jobs:
 
           echo "Creating release: $RELEASE_TITLE"
 
-          FILES=$(find release_upload -type f)
-
           gh release create "$TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$RELEASE_TITLE" \
             --generate-notes \
-            $FILES
+            ../my-carton-release.zip
