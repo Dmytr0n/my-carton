@@ -5,28 +5,36 @@ AppVersion=1.0.0
 AppPublisher=Dmytro Kliuchko
 DefaultDirName={autopf}\My-Carton
 DefaultGroupName=My-Carton
-; Шлях, куди батник покладе готовий інсталятор
 OutputDir=deploy\installer
 OutputBaseFilename=MyCarton_Setup_v1.0
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; --- ПРАВА АДМІНІСТРАТОРА ---
+; Це виправить помилку "Access Denied" при записі бази даних
+PrivilegesRequired=admin
 
 [Languages]
 Name: "ukrainian"; MessagesFile: "compiler:Languages\Ukrainian.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; Прибираємо Flags: unchecked, щоб користувач бачив галочку одразу
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Беремо файли з папки, яку згенерував батник (deploy\client)
+; Основний файл
 Source: "deploy\client\moy_carton.exe"; DestDir: "{app}"; Flags: ignoreversion
+; --- ДОДАЄМО ІКОНКУ В ПАКЕТ ---
+; Переконайтеся, що ваш батник копіює karton.ico у папку deploy\client
+Source: "deploy\client\karton.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "deploy\client\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "deploy\client\*.config"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\My-Carton"; Filename: "{app}\moy_carton.exe"
-Name: "{autodesktop}\My-Carton"; Filename: "{app}\moy_carton.exe"; Tasks: desktopicon
+; Додаємо параметр IconFilename, щоб явно вказати вашу іконку
+Name: "{group}\My-Carton"; Filename: "{app}\moy_carton.exe"; IconFilename: "{app}\karton.ico"
+Name: "{autodesktop}\My-Carton"; Filename: "{app}\moy_carton.exe"; IconFilename: "{app}\karton.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\moy_carton.exe"; Description: "{cm:LaunchProgram,My-Carton}"; Flags: nowait postinstall skipifsilent
+; Запуск від імені адміністратора після встановлення
+Filename: "{app}\moy_carton.exe"; Description: "{cm:LaunchProgram,My-Carton}"; Flags: nowait postinstall skipifsilent runascurrentuser
