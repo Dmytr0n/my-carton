@@ -29,8 +29,7 @@ jobs:
 
       - name: Run Build Script
         shell: cmd
-        run: |
-          call run.bat
+        run: call run.bat
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -42,48 +41,47 @@ jobs:
             ./deploy/client
 
   release:
-  name: Release My-Carton
-  runs-on: ubuntu-22.04
-  needs: run-script
-  if: startsWith(github.ref, 'refs/tags/')
+    name: Release My-Carton
+    runs-on: ubuntu-22.04
+    needs: run-script
+    if: startsWith(github.ref, 'refs/tags/')
 
-  permissions:
-    contents: write
+    permissions:
+      contents: write
 
-  steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-artifacts
-        path: release_files
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./release_files
 
-    - name: Debug structure
-      run: |
-        echo "=== FULL TREE ==="
-        find release_files
+      - name: Debug file structure
+        run: |
+          echo "=== RELEASE FILE STRUCTURE ==="
+          find ./release_files
 
-    - name: Prepare release files (flatten)
-      run: |
-        mkdir -p release_upload
+      - name: Prepare release files
+        run: |
+          mkdir -p release_upload
+          find release_files -type f -exec cp {} release_upload/ \;
 
-        # беремо ВСІ файли (не тільки exe)
-        find release_files -type f -exec cp {} release_upload/ \;
+          echo "=== UPLOAD CONTENT ==="
+          ls -R release_upload
 
-        echo "=== FINAL RELEASE FILES ==="
-        ls -R release_upload
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          RELEASE_TITLE="My-Carton $TAG_NAME"
 
-    - name: Create GitHub Release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        TAG="${{ github.ref_name }}"
+          echo "Creating release: $RELEASE_TITLE"
 
-        echo "Creating release for $TAG"
+          FILES=$(find release_upload -type f)
 
-        FILES=$(find release_upload -type f)
-
-        gh release create "$TAG" \
-          --repo "$GITHUB_REPOSITORY" \
-          --title "My-Carton $TAG" \
-          --generate-notes \
-          $FILES
+          gh release create "$TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TITLE" \
+            --generate-notes \
+            $FILES
