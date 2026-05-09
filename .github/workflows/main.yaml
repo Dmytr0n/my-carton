@@ -61,13 +61,15 @@ jobs:
           echo "=== RELEASE FILE STRUCTURE ==="
           find ./release_files
 
-      - name: Create ZIP archive
+      - name: Create ZIP archive (stable path)
         run: |
+          echo "Creating ZIP in workspace..."
+
           cd release_files
-          zip -r ../my-carton-release.zip .
+          zip -r $GITHUB_WORKSPACE/my-carton-release.zip .
 
           echo "=== ZIP CREATED ==="
-          ls -lh ../my-carton-release.zip
+          ls -lh $GITHUB_WORKSPACE/my-carton-release.zip
 
       - name: Create GitHub Release
         env:
@@ -78,8 +80,10 @@ jobs:
 
           echo "Creating release: $RELEASE_TITLE"
 
+          cd $GITHUB_WORKSPACE
+
           gh release create "$TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$RELEASE_TITLE" \
             --generate-notes \
-            ../my-carton-release.zip
+            my-carton-release.zip
