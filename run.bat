@@ -1,100 +1,197 @@
 @echo off
-REM Встановлюємо кодування для коректного відображення символів
 chcp 65001 >nul
+setlocal
 
-set rootDir=%cd%
+REM =========================================================
+REM MY_CARTON BUILD SCRIPT
+REM =========================================================
 
-REM Крок 1: Налаштування структури папок
+set "rootDir=%cd%"
+
+REM =========================================================
+REM STATUS VARIABLES
+REM =========================================================
+
+set "step1Status=NOT STARTED"
+set "step2Status=NOT STARTED"
+set "step3Status=NOT STARTED"
+set "step4Status=NOT STARTED"
+set "step5Status=NOT STARTED"
+set "step8Status=NOT STARTED"
+set "step9Status=NOT STARTED"
+
+REM =========================================================
+REM PATHS
+REM =========================================================
+
+set "solutionPath=%rootDir%\src\MyCarton\moy_carton.sln"
+set "clientBuildOutput=%rootDir%\deploy\client"
+set "artifactDir=%rootDir%\artefacts"
+set "clientArtifactZipPath=%artifactDir%\my_carton_build.zip"
+
+REM =========================================================
+REM STEP 1 - CREATE FOLDERS
+REM =========================================================
+
+echo.
+echo =========================================================
 echo Step 1: Setting up folder structure...
-if not exist "%rootDir%\deploy" mkdir "%rootDir%\deploy"
-if not exist "%rootDir%\deploy\client" mkdir "%rootDir%\deploy\client"
-if not exist "%rootDir%\artefacts" mkdir "%rootDir%\artefacts"
+echo =========================================================
 
-set step1Status=PASSED
+if not exist "%rootDir%\deploy" (
+    mkdir "%rootDir%\deploy"
+)
 
-REM ШЛЯХИ ДО ФАЙЛІВ (Адаптовано під твій скріншот)
-set solutionPath=%rootDir%\src\MyCarton\moy_carton.sln
-set clientBuildOutput=%rootDir%\deploy\client
-set clientArtifactZipPath=%rootDir%\artefacts\my_carton_build.zip
+if not exist "%clientBuildOutput%" (
+    mkdir "%clientBuildOutput%"
+)
 
-echo ---------------------------
+if not exist "%artifactDir%" (
+    mkdir "%artifactDir%"
+)
+
+set "step1Status=PASSED"
+
+REM =========================================================
+REM START BUILD
+REM =========================================================
+
+echo.
+echo =========================================================
 echo MOY_KARTON BUILD START
-echo ---------------------------
+echo =========================================================
 
-REM Крок 2: Перевірка наявності файлу Solution
+REM =========================================================
+REM STEP 2 - CHECK SOLUTION
+REM =========================================================
+
+echo.
 echo Step 2: Checking solution file...
-if not exist "%solutionPath%" (
-    echo [ERROR] Solution file not found at: %solutionPath%
-    set step2Status=FAILED
-    goto FinalReport
-) else (
-    set step2Status=PASSED
+
+if exist "%solutionPath%" (
     echo [OK] Solution found.
+    set "step2Status=PASSED"
+) else (
+    echo [ERROR] Solution file not found:
+    echo %solutionPath%
+    set "step2Status=FAILED"
+    goto FinalReport
 )
 
-REM Крок 3: Відновлення пакетів NuGet
+REM =========================================================
+REM STEP 3 - RESTORE NUGET
+REM =========================================================
+
+echo.
 echo Step 3: Restoring NuGet packages...
-REM Переконайтеся, що nuget.exe доступний у PATH або покладіть його поруч із батником
+
 nuget restore "%solutionPath%"
-if %errorlevel% neq 0 (
+
+if not "%errorlevel%"=="0" (
     echo [ERROR] Failed to restore NuGet packages.
-    set step3Status=FAILED
+    set "step3Status=FAILED"
     goto FinalReport
-) else (
-    set step3Status=PASSED
 )
 
-REM Крок 4: Перевірка MSBuild
+echo [OK] NuGet packages restored successfully.
+set "step3Status=PASSED"
+
+REM =========================================================
+REM STEP 4 - CHECK MSBUILD
+REM =========================================================
+
+echo.
 echo Step 4: Checking for MSBuild...
+
 where msbuild >nul 2>nul
+
 if errorlevel 1 (
-    echo [ERROR] MSBuild.exe not found. Переконайтеся, що Visual Studio Build Tools встановлені.
-    set step4Status=FAILED
+    echo [ERROR] MSBuild.exe not found.
+    set "step4Status=FAILED"
     goto FinalReport
-) else (
-    set step4Status=PASSED
 )
 
-REM Крок 5: Збірка проєкту (Release)
+echo [OK] MSBuild found.
+set "step4Status=PASSED"
+
+REM =========================================================
+REM STEP 5 - BUILD PROJECT
+REM =========================================================
+
+echo.
 echo Step 5: Building project...
-msbuild "%solutionPath%" /p:Configuration=Release /p:OutputPath="%clientBuildOutput%" /p:Platform="Any CPU"
+
+msbuild "%solutionPath%" ^
+/p:Configuration=Release ^
+/p:OutputPath="%clientBuildOutput%" ^
+/p:Platform="Any CPU"
 
 if exist "%clientBuildOutput%\moy_carton.exe" (
     echo [OK] Build completed successfully.
-    set step5Status=PASSED
+    set "step5Status=PASSED"
 ) else (
-    echo [ERROR] Build failed. EXE file not found in output.
-    set step5Status=FAILED
+    echo [ERROR] Build failed.
+    set "step5Status=FAILED"
     goto FinalReport
 )
 
-REM Крок 8: Архівування результатів
+REM =========================================================
+REM STEP 8 - CREATE ARCHIVE
+REM =========================================================
+
+echo.
 echo Step 8: Creating build artifact archive...
-powershell -Command "Compress-Archive -Path '%clientBuildOutput%\*' -DestinationPath '%clientArtifactZipPath%' -Force"
-if %errorlevel% neq 0 (
-    set step8Status=FAILED
-) else (
-    set step8Status=PASSED
-    echo [OK] Artifact saved at: %clientArtifactZipPath%
+
+if exist "%clientArtifactZipPath%" (
+    del /f /q "%clientArtifactZipPath%"
 )
 
-REM Крок 9: Побудова інсталятора (Inno Setup)
-set step9Status=NOT STARTED
-where iscc >nul 2>nul
-if errorlevel 1 (
-    echo [INFO] Inno Setup (iscc) not found. Skipping installer build.
-    set step9Status=SKIPPED
+powershell -Command "Compress-Archive -Path '%clientBuildOutput%\*' -DestinationPath '%clientArtifactZipPath%' -Force"
+
+if not "%errorlevel%"=="0" (
+    echo [ERROR] Failed to create archive.
+    set "step8Status=FAILED"
 ) else (
-    echo Step 9: Compiling installer...
-    iscc "%rootDir%\installer.iss"
-    if %errorlevel% neq 0 (
-        set step9Status=FAILED
-    ) else (
-        set step9Status=PASSED
-    )
+    echo [OK] Artifact saved at:
+    echo %clientArtifactZipPath%
+    set "step8Status=PASSED"
 )
+
+REM =========================================================
+REM STEP 9 - BUILD INSTALLER
+REM =========================================================
+
+echo.
+echo Step 9: Checking Inno Setup...
+
+where iscc >nul 2>nul
+
+if errorlevel 1 (
+    echo [INFO] Inno Setup Compiler not found.
+    echo [INFO] Installer build skipped.
+    set "step9Status=SKIPPED"
+    goto FinalReport
+)
+
+echo [OK] Inno Setup found.
+echo Compiling installer...
+
+iscc "%rootDir%\installer.iss"
+
+if not "%errorlevel%"=="0" (
+    echo [ERROR] Installer build failed.
+    set "step9Status=FAILED"
+) else (
+    echo [OK] Installer compiled successfully.
+    set "step9Status=PASSED"
+)
+
+REM =========================================================
+REM FINAL REPORT
+REM =========================================================
 
 :FinalReport
+
 echo.
 echo =========================================================
 echo                BUILD REPORT: MY-CARTON
@@ -110,3 +207,5 @@ echo =========================================================
 echo Project Owner: Dmytro Kliuchko
 echo Status Date: %date% %time%
 echo =========================================================
+
+exit /b 0
