@@ -12,9 +12,20 @@ namespace moy_carton
 {
     public partial class Form1 : Form
     {
-        private string dataFilePath = "database.csv";
+        // --- ЗМІННІ ДЛЯ НАВІГАЦІЇ ПО МІСЯЦЯХ ---
+        private DateTime currentMonthDate = DateTime.Now; // Зберігає поточний відкритий місяць
+                                                          // Динамічний шлях: створює окремий файл для кожного місяця (напр. data_05_2026.csv)
+        private string GetCurrentDataFilePath() => $"data_{currentMonthDate:MM_yyyy}.csv";
+
+        private Label lblMonthDisplay; // Текст з назвою місяця
         // Ваші магазини
         private int[] shops = { 30, 31, 32, 33, 11, 20, 40, 13, 10 };
+
+        private string pricesFilePath = "prices.csv"; // Файл для збереження цін
+        private Dictionary<int, decimal> shopPrices = new Dictionary<int, decimal>(); // Зберігає ціни
+        private Panel pnlSettings; // Панель налаштувань
+        private DataGridView dgvPrices; // Таблиця для цін
+        private Button btnSettings; // Кнопка налаштувань
 
         public Form1()
         {
@@ -24,7 +35,11 @@ namespace moy_carton
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            LoadPrices(); // <--- ДОДАЙ ЦЕ ПЕРШИМ
+
             SetupModernLayout();
+            SetupSettingsPanel(); // <--- ДОДАЙ ЦЕ ТУТ
+
             SetupGrid();
             FillDates();
             LoadData();
@@ -80,28 +95,54 @@ namespace moy_carton
                 dgv.Columns["total_day"].DefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
                 dgv.Columns["total_day"].DefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
             }
+
+            if (dgv.Columns.Contains("total_money"))
+            {
+                dgv.Columns["total_money"].DefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                dgv.Columns["total_money"].DefaultCellStyle.BackColor = Color.FromArgb(230, 250, 230); // Світло-зелений
+                dgv.Columns["total_money"].DefaultCellStyle.ForeColor = Color.DarkGreen;
+            }
+
+            // Стиль для Годин
+            if (dgv.Columns.Contains("hours"))
+            {
+                dgv.Columns["hours"].DefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                dgv.Columns["hours"].DefaultCellStyle.BackColor = Color.FromArgb(255, 250, 240); // Легкий теплий відтінок
+            }
+            // Стиль для Середнього за годину
+            if (dgv.Columns.Contains("avg_hour"))
+            {
+                dgv.Columns["avg_hour"].DefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                dgv.Columns["avg_hour"].DefaultCellStyle.BackColor = Color.FromArgb(240, 248, 255); // Світло-синій
+                dgv.Columns["avg_hour"].DefaultCellStyle.ForeColor = Color.DarkBlue;
+            }
         }
         private void SetupModernLayout()
         {
-            // --- ЗАГАЛЬНИЙ ФОН ---
-            this.Text = "Moy_Karton v 1.0.0";
+            // --- ЗАГАЛЬНИЙ ФОН ТА РОЗМІР ВІКНА ---
+            this.Text = "Moy_Karton v 1.1.0";
             this.BackColor = Color.FromArgb(240, 242, 245);
             this.Padding = new Padding(0);
             this.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular);
 
+            // ІДЕАЛЬНІ НАЛАШТУВАННЯ ВІКНА:
+            this.Size = new Size(1130, 750); // Ті самі ідеальні розміри зі скріншоту
+            this.FormBorderStyle = FormBorderStyle.FixedSingle; // Забороняємо тягнути вікно мишкою за краї
+            this.MaximizeBox = true; // ДОЗВОЛЯЄМО розгортати вікно на весь екран
+            this.StartPosition = FormStartPosition.CenterScreen; // Запуск по центру екрана
+
             // --- 1. ШАПКА (HEADER) ---
             Panel headerPanel = new Panel();
             headerPanel.Dock = DockStyle.Top;
-            headerPanel.Height = 80; // Трохи вища шапка
+            headerPanel.Height = 80;
             headerPanel.BackColor = Color.FromArgb(30, 39, 46); // Темний матовий колір (Dark Slate)
             headerPanel.Padding = new Padding(15);
             this.Controls.Add(headerPanel);
 
             // --- ЛОГОТИП (КРУТА ІКОНКА) ---
-            // Використовуємо IconPictureBox з бібліотеки FontAwesome
             IconPictureBox logoBox = new IconPictureBox();
-            logoBox.IconChar = IconChar.BoxOpen; // Іконка відкритої коробки
-            logoBox.IconColor = Color.FromArgb(52, 152, 219); // Блакитний колір іконки
+            logoBox.IconChar = IconChar.BoxOpen;
+            logoBox.IconColor = Color.FromArgb(52, 152, 219);
             logoBox.IconSize = 50;
             logoBox.Size = new Size(50, 50);
             logoBox.Location = new Point(20, 15);
@@ -111,7 +152,7 @@ namespace moy_carton
 
             // --- ЗАГОЛОВОК ---
             Label titleLabel = new Label();
-            titleLabel.Text = "Moy_Karton"; // Англійська назва виглядає дорожче
+            titleLabel.Text = "Moy_Karton";
             titleLabel.ForeColor = Color.White;
             titleLabel.Font = new Font("Segoe UI", 15, FontStyle.Bold);
             titleLabel.AutoSize = true;
@@ -127,10 +168,54 @@ namespace moy_carton
             subTitle.Location = new Point(82, 45);
             headerPanel.Controls.Add(subTitle);
 
-            // --- 2. КНОПКИ З ІКОНКАМИ ---
-            // Передаємо конкретні іконки з бібліотеки (FileExcel, Camera)
+            // --- 2. КНОПКИ З ІКОНКАМИ (ПРАВА ЧАСТИНА) ---
             StylizeButtonWithIcon(button1, "Експорт Excel", headerPanel, 1, IconChar.FileExcel);
             StylizeButtonWithIcon(button2, "Зберегти Звіт", headerPanel, 2, IconChar.Camera);
+
+            btnSettings = new Button();
+            StylizeButtonWithIcon(btnSettings, "Ціни", headerPanel, 3, IconChar.Cogs);
+            btnSettings.Click += (s, ev) => { pnlSettings.Visible = true; pnlSettings.BringToFront(); };
+
+            // --- ПАНЕЛЬ НАВІГАЦІЇ МІСЯЦІВ (ІДЕАЛЬНА СТИЛІЗАЦІЯ) ---
+            Panel monthNavPanel = new Panel();
+            monthNavPanel.Size = new Size(250, 40);
+            // Розміщуємо по X=320, щоб бути точно між заголовком і кнопками
+            monthNavPanel.Location = new Point(320, 20);
+            monthNavPanel.BackColor = Color.FromArgb(40, 50, 60); // Темний акцентний фон
+
+            // Робимо закруглені кути (переконайся, що метод CreateRoundRectRgn є в твоєму класі)
+            monthNavPanel.Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, monthNavPanel.Width, monthNavPanel.Height, 8, 8));
+            headerPanel.Controls.Add(monthNavPanel);
+
+            // Кнопка ВЛІВО (<) з ефектом наведення
+            Button btnPrevMonth = new Button { Size = new Size(45, 40), Dock = DockStyle.Left, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, BackColor = Color.Transparent };
+            btnPrevMonth.FlatAppearance.BorderSize = 0;
+            btnPrevMonth.FlatAppearance.MouseOverBackColor = Color.FromArgb(60, 75, 90); // Світлішає при наведенні
+            btnPrevMonth.Image = IconChar.ChevronLeft.ToBitmap(Color.White, 20);
+            btnPrevMonth.Click += (s, ev) => ChangeMonth(-1);
+
+            // Кнопка ВПРАВО (>) з ефектом наведення
+            Button btnNextMonth = new Button { Size = new Size(45, 40), Dock = DockStyle.Right, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, BackColor = Color.Transparent };
+            btnNextMonth.FlatAppearance.BorderSize = 0;
+            btnNextMonth.FlatAppearance.MouseOverBackColor = Color.FromArgb(60, 75, 90); // Світлішає при наведенні
+            btnNextMonth.Image = IconChar.ChevronRight.ToBitmap(Color.White, 20);
+            btnNextMonth.Click += (s, ev) => ChangeMonth(1);
+
+            // Назва місяця
+            lblMonthDisplay = new Label
+            {
+                Dock = DockStyle.Fill,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold), // Шрифт трохи менший, щоб ідеально влізло
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            // ВАЖЛИВО: Порядок додавання! Спочатку краї (кнопки), потім центр (текст)
+            monthNavPanel.Controls.Add(btnPrevMonth);
+            monthNavPanel.Controls.Add(btnNextMonth);
+            monthNavPanel.Controls.Add(lblMonthDisplay);
+
+            UpdateMonthLabel();
 
             // --- 3. КАРТКА З ТАБЛИЦЕЮ ---
             Panel tableCard = new Panel();
@@ -209,95 +294,104 @@ namespace moy_carton
             dataGridView1.Columns.Clear();
             dataGridView1.Rows.Clear();
 
-            // 1. Колонка Дата
             dataGridView1.Columns.Add("date", "Дата");
             dataGridView1.Columns[0].ReadOnly = true;
-
-            // Важливе виправлення з попереднього кроку (ширина дати)
             dataGridView1.Columns[0].AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
 
-            // 2. Колонки Магазинів
+            // Колонки Магазинів
             foreach (int shop in shops)
             {
                 int index = dataGridView1.Columns.Add($"shop_{shop}", shop.ToString());
                 dataGridView1.Columns[index].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
             }
 
-            // 3. Колонка "Всього за день"
+            // НОВА КОЛОНКА: Години роботи
+            int hoursIndex = dataGridView1.Columns.Add("hours", "Години");
+            dataGridView1.Columns[hoursIndex].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dataGridView1.Columns[hoursIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells; // ФІКСАЦІЯ ШИРИНИ
+
+            // Колонка "Всього коробок"
             int totalIndex = dataGridView1.Columns.Add("total_day", "Всього");
             dataGridView1.Columns[totalIndex].ReadOnly = true;
-            dataGridView1.Columns[totalIndex].DefaultCellStyle.BackColor = Color.WhiteSmoke;
-            dataGridView1.Columns[totalIndex].DefaultCellStyle.Font = new Font(dataGridView1.Font, FontStyle.Bold);
             dataGridView1.Columns[totalIndex].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dataGridView1.Columns[totalIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells; // ФІКСАЦІЯ ШИРИНИ
+
+            // Колонка "Сума (Гроші)"
+            int moneyIndex = dataGridView1.Columns.Add("total_money", "Сума PLN");
+            dataGridView1.Columns[moneyIndex].ReadOnly = true;
+            dataGridView1.Columns[moneyIndex].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dataGridView1.Columns[moneyIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells; // ФІКСАЦІЯ ШИРИНИ
+
+            // НОВА КОЛОНКА: Середнє за годину
+            int avgIndex = dataGridView1.Columns.Add("avg_hour", "Сер./год");
+            dataGridView1.Columns[avgIndex].ReadOnly = true;
+            dataGridView1.Columns[avgIndex].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            dataGridView1.Columns[avgIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells; // ФІКСАЦІЯ ШИРИНИ
 
             dataGridView1.AllowUserToAddRows = false;
             dataGridView1.AllowUserToDeleteRows = false;
+            // Магазини розтягуються рівномірно на весь вільний простір
             dataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
-            // --- ГОЛОВНЕ: ПРИБИРАЄМО ТРИКУТНИКИ (СОРТУВАННЯ) ---
             foreach (DataGridViewColumn column in dataGridView1.Columns)
-            {
-                // Це прибирає іконку і блокує клік по заголовку
                 column.SortMode = DataGridViewColumnSortMode.NotSortable;
-            }
-            // ----------------------------------------------------
 
-            // Події
             dataGridView1.CellValueChanged += (s, e) => CalculateSums();
-
             dataGridView1.CurrentCellDirtyStateChanged += (s, e) =>
             {
-                if (dataGridView1.IsCurrentCellDirty)
-                    dataGridView1.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                if (dataGridView1.IsCurrentCellDirty) dataGridView1.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
 
             dataGridView1.EditingControlShowing += DataGridView1_EditingControlShowing;
+            dataGridView1.CellEnter += DataGridView1_CellEnter;
+            dataGridView1.CellLeave += DataGridView1_CellLeave;
         }
 
         private void DataGridView1_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
         {
             e.Control.KeyPress -= new KeyPressEventHandler(Column_KeyPress);
-
-            // Перевіряємо, чи це колонка магазинів (індекси від 1 до 7)
             int colIndex = dataGridView1.CurrentCell.ColumnIndex;
-            if (colIndex >= 1 && colIndex <= shops.Length)
+
+            // Дозволяємо ввід для магазинів ТА колонки годин (індекс shops.Length + 1)
+            if (colIndex >= 1 && colIndex <= shops.Length + 1)
             {
-                TextBox tb = e.Control as TextBox;
-                if (tb != null)
-                {
-                    tb.KeyPress += new KeyPressEventHandler(Column_KeyPress);
-                }
+                if (e.Control is TextBox tb) tb.KeyPress += new KeyPressEventHandler(Column_KeyPress);
             }
         }
 
         private void Column_KeyPress(object sender, KeyPressEventArgs e)
         {
-            // Дозволяємо лише цифри та Backspace
-            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
-            {
+            // Дозволяємо цифри, Backspace, та кому/крапку для годин
+            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && e.KeyChar != ',' && e.KeyChar != '.')
                 e.Handled = true;
-            }
+
+            // Автоматично міняємо крапку на кому для правильності формату в C#
+            if (e.KeyChar == '.') e.KeyChar = ',';
+
+            // Блокуємо введення другої коми підряд
+            if (sender is TextBox tb && e.KeyChar == ',' && tb.Text.Contains(","))
+                e.Handled = true;
         }
 
         private void FillDates()
         {
             dataGridView1.Rows.Clear();
-            DateTime now = DateTime.Now;
-            int daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
+
+            // Використовуємо наш вибраний місяць замість DateTime.Now
+            int daysInMonth = DateTime.DaysInMonth(currentMonthDate.Year, currentMonthDate.Month);
 
             for (int day = 1; day <= daysInMonth; day++)
             {
-                DateTime date = new DateTime(now.Year, now.Month, day);
+                DateTime date = new DateTime(currentMonthDate.Year, currentMonthDate.Month, day);
                 int rowIndex = dataGridView1.Rows.Add(date.ToString("dd.MM.yyyy"));
 
-                // Підсвічуємо сьогоднішній день
+                // Підсвічуємо сьогоднішній день ТІЛЬКИ якщо ми дивимося поточний місяць і рік
                 if (date.Date == DateTime.Now.Date)
                 {
                     dataGridView1.Rows[rowIndex].DefaultCellStyle.BackColor = Color.LightYellow;
                 }
             }
 
-            // Рядок СУМА
             int sumRowIndex = dataGridView1.Rows.Add();
             dataGridView1.Rows[sumRowIndex].Cells[0].Value = "СУМА:";
             dataGridView1.Rows[sumRowIndex].ReadOnly = true;
@@ -318,55 +412,83 @@ namespace moy_carton
 
                 int sumRowIndex = dataGridView1.Rows.Count - 1;
                 int shopColsCount = shops.Length;
-                int totalDayColIndex = shopColsCount + 1; // Індекс колонки "Всього"
+                int hoursColIndex = shopColsCount + 1;
+                int totalDayColIndex = shopColsCount + 2;
+                int totalMoneyColIndex = shopColsCount + 3;
+                int avgHourColIndex = shopColsCount + 4;
 
-                // 1. Очистка рядка сум (вертикальних)
-                for (int col = 1; col <= totalDayColIndex; col++)
+                // Очистка нижнього рядка СУМА
+                for (int col = 1; col <= avgHourColIndex; col++)
                     dataGridView1.Rows[sumRowIndex].Cells[col].Value = 0;
 
-                // 2. Проходимо по рядках (дніх)
                 for (int row = 0; row < sumRowIndex; row++)
                 {
-                    int rowSum = 0;
+                    int rowSumBoxes = 0;
+                    decimal rowMoney = 0m;
+                    decimal rowHours = 0m;
 
-                    // Проходимо по магазинах
+                    // 1. Рахуємо коробки та гроші
                     for (int col = 1; col <= shopColsCount; col++)
                     {
                         var cellValue = dataGridView1.Rows[row].Cells[col].Value;
-
                         if (cellValue != null && int.TryParse(cellValue.ToString(), out int val))
                         {
-                            // Додаємо до суми внизу (вертикально)
                             int prevTotal = Convert.ToInt32(dataGridView1.Rows[sumRowIndex].Cells[col].Value);
                             dataGridView1.Rows[sumRowIndex].Cells[col].Value = prevTotal + val;
 
-                            // Додаємо до суми рядка (горизонтально)
-                            rowSum += val;
+                            rowSumBoxes += val;
+                            int shopId = shops[col - 1];
+                            rowMoney += val * shopPrices[shopId];
                         }
                     }
-                    // Записуємо суму дня
-                    dataGridView1.Rows[row].Cells[totalDayColIndex].Value = rowSum > 0 ? rowSum.ToString() : "";
+
+                    // 2. Читаємо введені години
+                    var hoursCell = dataGridView1.Rows[row].Cells[hoursColIndex].Value;
+                    if (hoursCell != null && decimal.TryParse(hoursCell.ToString().Replace(".", ","), out decimal h))
+                    {
+                        rowHours = h;
+                        decimal prevTotalHours = Convert.ToDecimal(dataGridView1.Rows[sumRowIndex].Cells[hoursColIndex].Value);
+                        dataGridView1.Rows[sumRowIndex].Cells[hoursColIndex].Value = prevTotalHours + h;
+                    }
+
+                    // Записуємо підсумки дня
+                    dataGridView1.Rows[row].Cells[totalDayColIndex].Value = rowSumBoxes > 0 ? rowSumBoxes.ToString() : "";
+                    dataGridView1.Rows[row].Cells[totalMoneyColIndex].Value = rowMoney > 0 ? rowMoney.ToString("0.00") : "";
+
+                    // 3. Рахуємо середнє за годину
+                    if (rowHours > 0)
+                        dataGridView1.Rows[row].Cells[avgHourColIndex].Value = (rowMoney / rowHours).ToString("0.00");
+                    else
+                        dataGridView1.Rows[row].Cells[avgHourColIndex].Value = "";
                 }
 
-                // 3. Гранд-тотал (правий нижній кут - сума всього за місяць)
-                int grandTotal = 0;
+                // Гранд-тотал (Всього за місяць)
+                int grandTotalBoxes = 0;
+                decimal grandTotalMoney = 0m;
+
                 for (int col = 1; col <= shopColsCount; col++)
                 {
-                    grandTotal += Convert.ToInt32(dataGridView1.Rows[sumRowIndex].Cells[col].Value);
+                    int colTotal = Convert.ToInt32(dataGridView1.Rows[sumRowIndex].Cells[col].Value);
+                    grandTotalBoxes += colTotal;
+                    int shopId = shops[col - 1];
+                    grandTotalMoney += colTotal * shopPrices[shopId];
                 }
-                dataGridView1.Rows[sumRowIndex].Cells[totalDayColIndex].Value = grandTotal;
+
+                dataGridView1.Rows[sumRowIndex].Cells[totalDayColIndex].Value = grandTotalBoxes;
+                dataGridView1.Rows[sumRowIndex].Cells[totalMoneyColIndex].Value = grandTotalMoney.ToString("0.00");
+
+                decimal grandTotalHours = Convert.ToDecimal(dataGridView1.Rows[sumRowIndex].Cells[hoursColIndex].Value);
+                if (grandTotalHours > 0)
+                    dataGridView1.Rows[sumRowIndex].Cells[avgHourColIndex].Value = (grandTotalMoney / grandTotalHours).ToString("0.00");
             }
-            finally
-            {
-                isCalculating = false;
-            }
+            finally { isCalculating = false; }
         }
 
         private void SaveData()
         {
             try
             {
-                using (StreamWriter sw = new StreamWriter(dataFilePath, false, Encoding.UTF8))
+                using (StreamWriter sw = new StreamWriter(GetCurrentDataFilePath(), false, Encoding.UTF8))
                 {
                     // Зберігаємо всі рядки, крім останнього (СУМА)
                     for (int i = 0; i < dataGridView1.Rows.Count - 1; i++)
@@ -390,12 +512,13 @@ namespace moy_carton
 
         private void LoadData()
         {
-            if (!File.Exists(dataFilePath)) return;
+            string currentFile = GetCurrentDataFilePath();
+            if (!File.Exists(currentFile)) return;
 
             try
             {
                 isCalculating = true;
-                string[] lines = File.ReadAllLines(dataFilePath, Encoding.UTF8);
+                string[] lines = File.ReadAllLines(currentFile, Encoding.UTF8);
 
                 foreach (string line in lines)
                 {
@@ -403,26 +526,35 @@ namespace moy_carton
                     if (parts.Length < 2) continue;
 
                     string savedDate = parts[0];
-
                     foreach (DataGridViewRow row in dataGridView1.Rows)
                     {
+                        // Пропускаємо останній рядок СУМА
                         if (row.Index == dataGridView1.Rows.Count - 1) continue;
 
                         if (row.Cells[0].Value?.ToString() == savedDate)
                         {
-                            // Завантажуємо дані (Магазини + Всього)
-                            // col < parts.Length гарантує, що ми не вийдемо за межі, якщо файл старий
-                            for (int col = 1; col < dataGridView1.Columns.Count && col < parts.Length; col++)
+                            // 1. Завантажуємо дані магазинів
+                            for (int col = 1; col <= shops.Length && col < parts.Length; col++)
                             {
                                 if (int.TryParse(parts[col], out int val))
-                                {
                                     row.Cells[col].Value = val;
-                                }
+                            }
+
+                            // 2. Завантажуємо години (індекс стовпця йде відразу після магазинів)
+                            if (parts.Length > shops.Length + 1)
+                            {
+                                string hoursValue = parts[shops.Length + 1];
+                                if (decimal.TryParse(hoursValue.Replace(".", ","), out decimal h))
+                                    row.Cells[shops.Length + 1].Value = h;
                             }
                             break;
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Помилка завантаження даних місяця: " + ex.Message);
             }
             finally
             {
@@ -612,7 +744,218 @@ namespace moy_carton
                 MessageBox.Show("Помилка при збереженні: " + ex.Message);
             }
         }
+        // --- МЕТОДИ ДЛЯ ПІДСВІЧУВАННЯ РЯДКА ---
+        private void DataGridView1_CellEnter(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.RowIndex < dataGridView1.Rows.Count - 1)
+                dataGridView1.Rows[e.RowIndex].DefaultCellStyle.BackColor = Color.FromArgb(226, 240, 255); // Ніжно-блакитний
+        }
 
+        private void DataGridView1_CellLeave(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.RowIndex < dataGridView1.Rows.Count - 1)
+            {
+                if (e.RowIndex % 2 == 0) dataGridView1.Rows[e.RowIndex].DefaultCellStyle.BackColor = Color.White;
+                else dataGridView1.Rows[e.RowIndex].DefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
 
+                if (dataGridView1.Rows[e.RowIndex].Cells[0].Value?.ToString() == DateTime.Now.ToString("dd.MM.yyyy"))
+                    dataGridView1.Rows[e.RowIndex].DefaultCellStyle.BackColor = Color.LightYellow;
+            }
+        }
+
+        // --- МЕТОДИ ДЛЯ ЦІН ---
+        private void LoadPrices()
+        {
+            foreach (int shop in shops) shopPrices[shop] = 0m;
+            if (!File.Exists(pricesFilePath)) return;
+            try
+            {
+                string[] lines = File.ReadAllLines(pricesFilePath, Encoding.UTF8);
+                foreach (string line in lines)
+                {
+                    string[] parts = line.Split(';');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int shopId) && decimal.TryParse(parts[1], out decimal price))
+                        shopPrices[shopId] = price;
+                }
+            }
+            catch { }
+        }
+
+        private void SavePrices()
+        {
+            try
+            {
+                using (StreamWriter sw = new StreamWriter(pricesFilePath, false, Encoding.UTF8))
+                {
+                    foreach (DataGridViewRow row in dgvPrices.Rows)
+                    {
+                        if (row.Cells[0].Value != null && row.Cells[1].Value != null)
+                        {
+                            string shopStr = row.Cells[0].Value.ToString().Replace("Mag ", "");
+                            if (int.TryParse(shopStr, out int shopId) && decimal.TryParse(row.Cells[1].Value.ToString().Replace(".", ","), out decimal price))
+                            {
+                                shopPrices[shopId] = price;
+                                sw.WriteLine($"{shopId};{price}");
+                            }
+                        }
+                    }
+                }
+                CalculateSums();
+                MessageBox.Show("Ціни успішно збережено!", "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                pnlSettings.Visible = false;
+            }
+            catch (Exception ex) { MessageBox.Show("Помилка: " + ex.Message); }
+        }
+
+        private void SetupSettingsPanel()
+        {
+            // 1. Головна панель (ЗРОБИЛИ КОМПАКТНІШОЮ: 360x430)
+            pnlSettings = new Panel
+            {
+                Size = new Size(360, 430),
+                BackColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Visible = false
+            };
+
+            // Центруємо на екрані
+            pnlSettings.Location = new Point((this.ClientSize.Width - pnlSettings.Width) / 2, (this.ClientSize.Height - pnlSettings.Height) / 2);
+            pnlSettings.Anchor = AnchorStyles.None;
+
+            // 2. Красива шапка панелі (Header)
+            Panel headerSettings = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 50,
+                BackColor = Color.FromArgb(41, 128, 185)
+            };
+            pnlSettings.Controls.Add(headerSettings);
+
+            // Заголовок у шапці
+            Label lblTitle = new Label
+            {
+                Text = "Налаштування цін (Stawka)",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(15, 12)
+            };
+            headerSettings.Controls.Add(lblTitle);
+
+            // БЛОК З ХРЕСТИКОМ ВИДАЛЕНО
+
+            // 3. Таблиця цін (Зменшено висоту, бо є прокрутка)
+            dgvPrices = new DataGridView
+            {
+                Location = new Point(20, 65),
+                Size = new Size(320, 270),    // Висота тепер 270 замість 350
+                AllowUserToAddRows = false,
+                RowHeadersVisible = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                EnableHeadersVisualStyles = false
+            };
+
+            // Стиль шапки таблиці
+            dgvPrices.ColumnHeadersHeight = 40;
+            dgvPrices.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 242, 245);
+            dgvPrices.ColumnHeadersDefaultCellStyle.ForeColor = Color.Black;
+            dgvPrices.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 10);
+            dgvPrices.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+
+            // Стиль рядків таблиці
+            dgvPrices.DefaultCellStyle.Font = new Font("Segoe UI", 10);
+            dgvPrices.RowTemplate.Height = 35;
+            dgvPrices.DefaultCellStyle.SelectionBackColor = Color.FromArgb(226, 240, 255);
+            dgvPrices.DefaultCellStyle.SelectionForeColor = Color.Black;
+
+            // Колонки
+            dgvPrices.Columns.Add("shop", "Magazyn");
+            dgvPrices.Columns[0].ReadOnly = true;
+            dgvPrices.Columns.Add("price", "Ціна (PLN)");
+
+            // Заповнення даними
+            foreach (int shop in shops)
+            {
+                dgvPrices.Rows.Add($"Mag {shop}", shopPrices[shop].ToString("0.0000"));
+            }
+
+            pnlSettings.Controls.Add(dgvPrices);
+
+            // 4. Нижні кнопки (Підтягнуті вище)
+            Button btnSave = new Button
+            {
+                Text = "Зберегти",
+                Location = new Point(20, 355), // Підняли Y-координату
+                Size = new Size(150, 45),
+                BackColor = Color.FromArgb(39, 174, 96),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnSave.FlatAppearance.BorderSize = 0;
+            btnSave.Click += (s, e) => SavePrices();
+            pnlSettings.Controls.Add(btnSave);
+
+            Button btnClose = new Button
+            {
+                Text = "Скасувати",
+                Location = new Point(190, 355), // Підняли Y-координату
+                Size = new Size(150, 45),
+                BackColor = Color.FromArgb(149, 165, 166),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Click += (s, e) => pnlSettings.Visible = false;
+            pnlSettings.Controls.Add(btnClose);
+
+            // Додаємо панель на форму
+            this.Controls.Add(pnlSettings);
+            pnlSettings.BringToFront();
+        }
+        private void UpdateMonthLabel()
+        {
+            // Робимо красиву назву українською мовою з великої літери (напр. "Травень 2026")
+            string monthName = currentMonthDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("uk-UA"));
+            lblMonthDisplay.Text = char.ToUpper(monthName[0]) + monthName.Substring(1);
+        }
+
+        private void ChangeMonth(int offset)
+        {
+            // Прораховуємо, на який місяць користувач хоче перейти
+            DateTime targetDate = currentMonthDate.AddMonths(offset);
+
+            // ОБМЕЖЕННЯ: Перевіряємо, чи збігається рік з поточним календарним роком
+            if (targetDate.Year != DateTime.Now.Year)
+            {
+                // Не пускаємо далі і, за бажанням, можемо вивести попередження
+                // MessageBox.Show("Перегляд даних доступний лише в межах поточного року.", "Обмеження", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // 1. Зберігаємо дані поточного відкритого місяця!
+            SaveData();
+
+            // 2. Змінюємо дату на дозволену
+            currentMonthDate = targetDate;
+            UpdateMonthLabel();
+
+            // 3. Оновлюємо таблицю (генеруємо нові дати і вантажимо інший файл)
+            FillDates();
+            LoadData();
+            CalculateSums();
+        }
+        [System.Runtime.InteropServices.DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
+        private static extern IntPtr CreateRoundRectRgn
+(
+    int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse
+);
     }
+
 }
